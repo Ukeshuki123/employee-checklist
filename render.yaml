@@ -2,15 +2,17 @@ services:
   - type: web
     name: employee-checklist
     env: node
+    plan: free
     buildCommand: npm install
     startCommand: node app.js
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: "5000"
-    plan: free
-    autoDeploy: true
+        value: "3000"
+      - key: JWT_SECRET
+        generateValue: true
     healthCheckPath: /
     domains:
       - employee-checklist.onrender.com

@@ -1,25 +1,24 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 
 const app = express();
-const port = 5000; // Fixed port for consistent access
-const isProduction = process.env.NODE_ENV === 'production';
+const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-            styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
-            imgSrc: ["'self'", 'data:', 'https:'],
-            connectSrc: ["'self'", '*'],
-            fontSrc: ["'self'", 'https:', 'data:'],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https:", "http:"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https:", "http:"],
+            imgSrc: ["'self'", "data:", "https:", "http:"],
+            connectSrc: ["'self'", "*"],
+            fontSrc: ["'self'", "https:", "http:", "data:"],
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             frameSrc: ["'self'"],
@@ -46,6 +45,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Root route - redirect to login
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Dashboard route
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 // Database connection
@@ -329,7 +333,8 @@ app.post('/api/employees', checkAuth, checkRole(['admin', 'manager']), async (re
             });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
         const [result] = await pool.query(
             'INSERT INTO employees (username, password, branchname, role) VALUES (?, ?, ?, ?)',
             [username, hashedPassword, branchname, role]
@@ -682,13 +687,13 @@ app.post('/api/checklist/submit', async (req, res) => {
         for (const response of responses) {
             await pool.query(`
                 INSERT INTO checklist_responses 
-                (employee_id, question_id, answer_text, answer_status, created_at)
-                VALUES (?, ?, ?, ?, NOW())
+                (employee_id, question_id, answer_text, answer_status)
+                VALUES (?, ?, ?, ?)
             `, [
                 employeeId,
                 response.question_id,
                 response.answer_text,
-                response.answer_status
+                response.answer_status || 'pending'
             ]);
         }
 
@@ -972,31 +977,82 @@ app.post('/api/checklist/submit', authenticateToken, async (req, res) => {
     }
 });
 
-// Error handling middleware
-app.use((req, res, next) => {
-    res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+// API Routes for statistics
+app.get('/api/statistics', authenticateToken, async (req, res) => {
+    try {
+        const [totalEmployees] = await pool.query('SELECT COUNT(*) as count FROM employees');
+        const [totalChecklists] = await pool.query('SELECT COUNT(*) as count FROM checklists');
+        const [completedTasks] = await pool.query('SELECT COUNT(*) as count FROM checklist_items WHERE status = "completed"');
+
+        res.json({
+            totalEmployees: totalEmployees[0].count,
+            totalChecklists: totalChecklists[0].count,
+            completedTasks: completedTasks[0].count
+        });
+    } catch (error) {
+        console.error('Error fetching statistics:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
+// API Routes for recent checklists
+app.get('/api/checklists/recent', authenticateToken, async (req, res) => {
+    try {
+        const [checklists] = await pool.query(`
+            SELECT c.id, e.name as employeeName, e.department, c.status, 
+                   (SELECT COUNT(*) * 100.0 / COUNT(*) FROM checklist_items 
+                    WHERE checklist_id = c.id AND status = 'completed') as progress
+            FROM checklists c
+            JOIN employees e ON c.employee_id = e.id
+            ORDER BY c.created_at DESC
+            LIMIT 10
+        `);
+        
+        res.json(checklists.map(checklist => ({
+            ...checklist,
+            progress: Math.round(checklist.progress || 0)
+        })));
+    } catch (error) {
+        console.error('Error fetching recent checklists:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).sendFile(path.join(__dirname, 'public', '500.html'));
+    res.status(500).json({
+        success: false,
+        message: 'Internal Server Error',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
-// Start server after initialization
-initializeAll().then(() => {
-    app.listen(port, '0.0.0.0', () => {
-        console.log(`\n=== Employee Checklist Application ===`);
-        console.log(`\nServer is running on port ${port}`);
-        if (isProduction) {
-            console.log(`Production mode: Access via your deployed URL`);
-        } else {
-            console.log(`Development mode: http://localhost:${port}`);
-        }
-        console.log(`\nDefault admin credentials:`);
-        console.log(`Username: admin`);
-        console.log(`Password: admin123\n`);
+// Start server with error handling
+const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Server is running on port ${port}`);
+}).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use. Trying port ${port + 1}`);
+        server.listen(port + 1, '0.0.0.0');
+    } else {
+        console.error('Server error:', err);
+    }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
     });
+});
+
+// Initialize database and questions
+initializeAll().then(() => {
+    console.log('Initialization completed. Starting server...');
 }).catch(error => {
-    console.error('Failed to start server:', error);
+    console.error('Initialization failed:', error);
     process.exit(1);
 });
