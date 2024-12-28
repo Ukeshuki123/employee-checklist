@@ -79,17 +79,17 @@ const checkAuth = (req, res, next) => {
     }
 };
 
-// Middleware to check role permissions
-const checkRole = (allowedRoles) => {
+// Middleware to check user role
+const checkRole = (roles) => {
     return (req, res, next) => {
         if (!req.user) {
-            return res.status(401).json({ success: false, message: 'Not authenticated' });
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
-
-        if (allowedRoles.includes(req.user.role.toLowerCase())) {
+        
+        if (roles.includes(req.user.role)) {
             next();
         } else {
-            res.status(403).json({ success: false, message: 'Access denied' });
+            res.status(403).json({ success: false, message: 'Forbidden: Insufficient permissions' });
         }
     };
 };
@@ -234,42 +234,105 @@ async function initializeAll() {
     }
 }
 
-// Login endpoint
-app.post('/api/login', async (req, res) => {
+// Login endpoint with role
+app.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-
-        const [users] = await pool.query(
-            'SELECT * FROM employees WHERE username = ?',
-            [username]
-        );
-
+        const [users] = await pool.query('SELECT * FROM employees WHERE username = ?', [username]);
+        
         if (users.length === 0) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
-
+        
         const user = users[0];
         const validPassword = await bcrypt.compare(password, user.password);
-
+        
         if (!validPassword) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
-
+        
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
+            { id: user.id, role: user.role },
             'your-secret-key',
             { expiresIn: '24h' }
         );
-
+        
         res.json({
             success: true,
             token,
-            username: user.username,
-            role: user.role
+            user: {
+                id: user.id,
+                name: user.username,
+                role: user.role
+            }
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// User info endpoint
+app.get('/api/user/info', authenticateToken, async (req, res) => {
+    try {
+        const [user] = await pool.query('SELECT id, username, role FROM employees WHERE id = ?', [req.user.id]);
+        if (user.length === 0) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+        res.json({ success: true, ...user[0] });
+    } catch (error) {
+        console.error('Error fetching user info:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Admin only routes
+app.get('/api/admin/statistics', authenticateToken, checkRole(['admin']), async (req, res) => {
+    try {
+        const [stats] = await pool.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM employees WHERE role != 'admin') as totalEmployees,
+                (SELECT COUNT(*) FROM checklist_responses) as totalChecklists,
+                (SELECT COUNT(*) FROM checklist_responses WHERE answer_status = 'completed') as completedTasks
+        `);
+        res.json({ success: true, ...stats[0] });
+    } catch (error) {
+        console.error('Error fetching admin statistics:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Manager only routes
+app.get('/api/manager/team', authenticateToken, checkRole(['manager']), async (req, res) => {
+    try {
+        const [team] = await pool.query(`
+            SELECT id, username, branchname 
+            FROM employees 
+            WHERE role = 'employee' AND manager_id = ?
+        `, [req.user.id]);
+        res.json({ success: true, team });
+    } catch (error) {
+        console.error('Error fetching team members:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Employee only routes
+app.get('/api/employee/checklists', authenticateToken, checkRole(['employee']), async (req, res) => {
+    try {
+        const [checklists] = await pool.query(`
+            SELECT c.*, 
+                   (SELECT COUNT(*) FROM checklist_responses WHERE checklist_id = c.id AND answer_status = 'completed') as completed_tasks,
+                   (SELECT COUNT(*) FROM checklist_items WHERE checklist_id = c.id) as total_tasks
+            FROM checklists c
+            WHERE c.employee_id = ?
+            ORDER BY c.created_at DESC
+        `, [req.user.id]);
+        
+        res.json({ success: true, checklists });
+    } catch (error) {
+        console.error('Error fetching employee checklists:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
 
@@ -1055,4 +1118,179 @@ initializeAll().then(() => {
 }).catch(error => {
     console.error('Initialization failed:', error);
     process.exit(1);
+});
+
+// Manager statistics endpoint
+app.get('/api/manager/statistics', authenticateToken, checkRole(['manager']), async (req, res) => {
+    try {
+        const [stats] = await pool.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM employees WHERE manager_id = ?) as totalEmployees,
+                (SELECT COUNT(*) FROM checklists c 
+                 INNER JOIN employees e ON c.employee_id = e.id 
+                 WHERE e.manager_id = ? AND c.status = 'pending') as activeChecklists,
+                (SELECT COUNT(*) FROM checklist_responses cr 
+                 INNER JOIN checklists c ON cr.checklist_id = c.id 
+                 INNER JOIN employees e ON c.employee_id = e.id 
+                 WHERE e.manager_id = ? AND cr.answer_status = 'completed') as completedTasks,
+                (SELECT COUNT(*) FROM checklist_responses cr 
+                 INNER JOIN checklists c ON cr.checklist_id = c.id 
+                 INNER JOIN employees e ON c.employee_id = e.id 
+                 WHERE e.manager_id = ? AND cr.answer_status = 'pending') as pendingTasks
+        `, [req.user.id, req.user.id, req.user.id, req.user.id]);
+        
+        res.json({ success: true, ...stats[0] });
+    } catch (error) {
+        console.error('Error fetching manager statistics:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Assign task endpoint
+app.post('/api/manager/assign-task', authenticateToken, checkRole(['manager']), async (req, res) => {
+    try {
+        const { employeeId, taskType, dueDate } = req.body;
+        
+        // Verify employee belongs to manager
+        const [employee] = await pool.query(
+            'SELECT id FROM employees WHERE id = ? AND manager_id = ?',
+            [employeeId, req.user.id]
+        );
+        
+        if (employee.length === 0) {
+            return res.status(403).json({ success: false, message: 'Employee not found or not authorized' });
+        }
+        
+        // Create checklist
+        const [result] = await pool.query(
+            'INSERT INTO checklists (employee_id, type, due_date, status) VALUES (?, ?, ?, "pending")',
+            [employeeId, taskType, dueDate]
+        );
+        
+        // Add default checklist items based on type
+        const checklistId = result.insertId;
+        const items = getDefaultChecklistItems(taskType);
+        
+        for (const item of items) {
+            await pool.query(
+                'INSERT INTO checklist_items (checklist_id, question_text) VALUES (?, ?)',
+                [checklistId, item]
+            );
+        }
+        
+        res.json({ success: true, message: 'Task assigned successfully' });
+    } catch (error) {
+        console.error('Error assigning task:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+function getDefaultChecklistItems(type) {
+    switch(type) {
+        case 'daily':
+            return [
+                'Complete daily attendance',
+                'Check email and respond to urgent matters',
+                'Update task status in system',
+                'Review daily goals',
+                'Submit daily report'
+            ];
+        case 'weekly':
+            return [
+                'Complete weekly progress report',
+                'Attend team meeting',
+                'Update project timelines',
+                'Review team performance',
+                'Plan next week\'s goals'
+            ];
+        case 'monthly':
+            return [
+                'Complete monthly performance review',
+                'Submit expense reports',
+                'Update department metrics',
+                'Review and update procedures',
+                'Set next month\'s targets'
+            ];
+        default:
+            return [];
+    }
+}
+
+// Get employee checklist details
+app.get('/api/employee/checklist/:id', authenticateToken, checkRole(['employee']), async (req, res) => {
+    try {
+        const [checklist] = await pool.query(`
+            SELECT c.*, ci.id as item_id, ci.question_text, 
+                   COALESCE(cr.answer_status, 'pending') as answer_status,
+                   cr.answer_text
+            FROM checklists c
+            INNER JOIN checklist_items ci ON c.id = ci.checklist_id
+            LEFT JOIN checklist_responses cr ON ci.id = cr.question_id
+            WHERE c.id = ? AND c.employee_id = ?
+        `, [req.params.id, req.user.id]);
+        
+        if (checklist.length === 0) {
+            return res.status(404).json({ success: false, message: 'Checklist not found' });
+        }
+        
+        const formattedChecklist = {
+            id: checklist[0].id,
+            title: checklist[0].title,
+            type: checklist[0].type,
+            due_date: checklist[0].due_date,
+            status: checklist[0].status,
+            items: checklist.map(item => ({
+                id: item.item_id,
+                question: item.question_text,
+                status: item.answer_status,
+                answer: item.answer_text
+            }))
+        };
+        
+        res.json({ success: true, checklist: formattedChecklist });
+    } catch (error) {
+        console.error('Error fetching checklist details:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Submit checklist response
+app.post('/api/employee/checklist/:id/submit', authenticateToken, checkRole(['employee']), async (req, res) => {
+    try {
+        const { responses } = req.body;
+        const checklistId = req.params.id;
+        
+        // Verify checklist belongs to employee
+        const [checklist] = await pool.query(
+            'SELECT id FROM checklists WHERE id = ? AND employee_id = ?',
+            [checklistId, req.user.id]
+        );
+        
+        if (checklist.length === 0) {
+            return res.status(403).json({ success: false, message: 'Checklist not found or not authorized' });
+        }
+        
+        // Update responses
+        for (const response of responses) {
+            await pool.query(`
+                INSERT INTO checklist_responses (question_id, answer_text, answer_status)
+                VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                answer_text = VALUES(answer_text),
+                answer_status = VALUES(answer_status)
+            `, [response.questionId, response.answer, response.status]);
+        }
+        
+        // Update checklist status
+        const allCompleted = responses.every(r => r.status === 'completed');
+        await pool.query(
+            'UPDATE checklists SET status = ? WHERE id = ?',
+            [allCompleted ? 'completed' : 'pending', checklistId]
+        );
+        
+        res.json({ success: true, message: 'Responses submitted successfully' });
+    } catch (error) {
+        console.error('Error submitting responses:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
 });
