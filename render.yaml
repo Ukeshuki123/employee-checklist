@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: employee-checklist
+    env: node
+    buildCommand: npm install
+    startCommand: node app.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5000"
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    domains:
+      - employee-checklist.onrender.com
+    disk:
+      name: employee-data
+      mountPath: /data
+      sizeGB: 1

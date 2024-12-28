@@ -1,0 +1,109 @@
+/* Login History Table Styles */
+.table-responsive {
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#loginHistoryTable {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+#loginHistoryTable th {
+    white-space: nowrap;
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+#loginHistoryTable td {
+    vertical-align: middle;
+}
+
+/* Badge Styles */
+.badge {
+    font-size: 0.85em;
+    padding: 0.35em 0.65em;
+    font-weight: 500;
+}
+
+/* Responsive Table */
+@media (max-width: 768px) {
+    #loginHistoryTable {
+        font-size: 0.9rem;
+    }
+
+    #loginHistoryTable td,
+    #loginHistoryTable th {
+        padding: 0.5rem;
+    }
+
+    .card-header {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .btn-group {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    #loginHistoryTable th {
+        background-color: #2d2d2d;
+        color: #fff;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .card {
+        background-color: #1a1a1a;
+        border-color: #404040;
+    }
+
+    .card-header {
+        background-color: #2d2d2d;
+        border-bottom-color: #404040;
+    }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) {
+    .btn:hover {
+        background-color: initial;
+    }
+
+    #loginHistoryTable td,
+    #loginHistoryTable th {
+        padding: 0.75rem; /* Larger touch targets */
+    }
+}
+
+/* High DPI Screens */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .badge {
+        font-weight: 400; /* Thinner fonts look better on retina */
+    }
+}
+
+/* Print Styles */
+@media print {
+    .btn-group {
+        display: none;
+    }
+
+    .card {
+        border: none;
+        box-shadow: none;
+    }
+
+    .table-responsive {
+        overflow: visible;
+    }
+}
