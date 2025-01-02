@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Employee Management</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Employee Management</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/employee" class="nav-item">
+                    <span class="nav-icon">👥</span>
+                    Employees
+                </a>
+                <a href="/checklist" class="nav-item">
+                    <span class="nav-icon">✓</span>
+                    Checklists
+                </a>
+                <a href="/responses" class="nav-item">
+                    <span class="nav-icon">📝</span>
+                    Responses
+                </a>
+                <button id="logoutBtn" class="nav-item logout-btn">
+                    <span class="nav-icon">🚪</span>
+                    Logout
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="welcome-header">
+                <h1>Welcome, <span id="userName">User</span>!</h1>
+            </div>
+            <div class="dashboard-cards">
+                <div class="card">
+                    <h3>Total Employees</h3>
+                    <p id="employeeCount">0</p>
+                </div>
+                <div class="card">
+                    <h3>Active Checklists</h3>
+                    <p id="checklistCount">0</p>
+                </div>
+                <div class="card">
+                    <h3>Pending Responses</h3>
+                    <p id="responseCount">0</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="../js/index.js"></script>
+</body>
+</html>

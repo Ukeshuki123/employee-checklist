@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responses - Employee Management</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Employee Management</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/index" class="nav-item">
+                    <span class="nav-icon">🏠</span>
+                    Home
+                </a>
+                <a href="/employee" class="nav-item">
+                    <span class="nav-icon">👥</span>
+                    Employees
+                </a>
+                <a href="/checklist" class="nav-item">
+                    <span class="nav-icon">✓</span>
+                    Checklists
+                </a>
+                <button id="logoutBtn" class="nav-item logout-btn">
+                    <span class="nav-icon">🚪</span>
+                    Logout
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="header">
+                <h1>Responses</h1>
+            </div>
+            <div class="responses-container" id="responsesContainer">
+                <!-- Responses will be dynamically populated -->
+            </div>
+        </main>
+    </div>
+    <script src="../js/responses.js"></script>
+</body>
+</html>

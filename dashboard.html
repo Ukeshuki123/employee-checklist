@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Employee Management</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>Employee Management Dashboard</h1>
+            <div class="user-info">
+                <span id="username"></span>
+                <button onclick="logout()">Logout</button>
+            </div>
+        </header>
+        <main>
+            <div class="dashboard-content">
+                <h2>Welcome to the Dashboard</h2>
+                <div id="checklists-container">
+                    <!-- Checklists will be loaded here -->
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>
